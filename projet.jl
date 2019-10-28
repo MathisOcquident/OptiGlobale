@@ -1,4 +1,4 @@
-using IntervalArithmetic, IntervalRootFinding
+using IntervalArithmetic
 
 
 #----------------------------FONCTION F ET SA DÉRIVÉE-----------------------------
@@ -77,10 +77,14 @@ function Q4(X::Interval, Y::Interval)
     resSup = X.hi
 	#résolution de inf(Y) = f(x) et sup(Y) = f(x) dans X
 	println("debut newton")
-	solYinf = roots(x -> x^3 + 2*x^2 - 5*x -6 - Y.lo, X)
-	solYsup = roots(x -> x^3 + 2*x^2 - 5*x -6 - Y.hi, X)
+	println("Yinf : ")
+	solYinf = Newton(X, 0.01, x -> x^3 + 2*x^2 - 5*x -6 - Y.lo, dF)
+	println()
+	println("Ysup : ")
+	solYsup = Newton(X, 0.01, x -> x^3 + 2*x^2 - 5*x -6 - Y.hi, dF)
 	println("fin newton")
-	solutions = append!([i.interval for i in solYinf], [i.interval for i in solYsup])
+	println()
+	solutions = append!([i for i in solYinf], [i for i in solYsup])
 	
 	#s'il y a des solutions dans X, on regarder si on peut contracter X
 	if !isempty(solutions) 
@@ -106,7 +110,7 @@ function Q4(X::Interval, Y::Interval)
 	    if argSolXsup <= length(solYsup) #solution de f(x) = inf(Y)
 	        #si f décroit en solXsup : on peut contracter
 	        dFx = dF(solXsup)
-	        if dFx.sup < 0 
+	        if dFx.hi < 0 
 	            resSup = solXsup.hi
 	        end
 	    else #solution de f(x) = sup(Y)
@@ -156,7 +160,77 @@ end
 
 
 #----------------------------- NEWTON --------------------------------------------
+#RETOURNE TOUTES LES SOLUTIONS DE F(X) = 0
+#eps : précision
+#attention (à mettre dans le rapport) : cas où une solution est un extremum local de f :
+#on veut que la solution contienne dérivée égale 0 : donc on veut pas de extended_div
+#-> verifier eps avant l'extended div
+#si ya pas de 0 dans une boite : si f(xinf)*f(xsup) > 0 alors ya pas de 0 
 
+#autre cas bizarre : quand c est la solution et que ca par en extended_div et que ca coupe en 2 en c
+function Newton(Xinit, eps, f, dF)
+    solutions = Array{Interval,1}() #solutions retournées
+    L = Array{Interval,1}() #intervalles en cours de traitement
+    push!(L,Xinit)
+    while !isempty(L)
+        X = L[length(L)]
+        fin = false 
+        while !fin
+            println("solutions : ", solutions)
+        	println("Liste de traitement : ", L)
+            println("Xcourant : ", X)
+            c = mid(X)
+            println("c = ", c)
+            println("dF(x) = ", dF(X))
+            ext = div_etendue(f(c),dF(X))
+            println("ext : ", ext)
+            if isempty(ext[2]) #pas de 0 dans la dérivée donc c'est ok -> 1 ou 0 solution
+                println("pas de 0 : ok")
+                N = c - ext[1]
+                X = intersect(X,N)
+                if X.hi-X.lo <= eps
+                	fin = true
+                	if !isempty(X)
+                	    push!(solutions,X)
+                	end
+                	deleteat!(L,length(L))
+                elseif f(X.hi)*f(X.lo) > 0 #pas de solution dans X donc on l'enlève
+                    deleteat!(L,length(L))
+                    fin = true
+                end
+            else #0 dans la dérivée -> division étendue -> plusieurs solutions
+                println("div etendue")
+                fin = true
+                N1 = c - ext[1]
+                X1 = intersect(X,N1)
+                N2 = c - ext[2]
+                X2 = intersect(X,N2)
+                deleteat!(L,length(L))
+                if !isempty(X1)
+                    push!(L,X1)
+                end
+                if !isempty(X2)
+                    push!(L,X2)	
+                end
+            end
+        end
+    end
+    
+    return solutions
+end 
+#---------------------------------------------------------------------------------
+
+
+
+#-------------------------DIVISION ETENDUE----------------------------------------
+#retourne 2 intervalles (le 2e est vide si le dénominateur b n'a pas de 0)
+function div_etendue(a::Float64,b)
+    if 0 in b
+        return Interval(-maxintfloat(),prevfloat(min(a/b.lo,a/b.hi))), Interval(nextfloat(max(a/b.hi,a/b.lo)),maxintfloat())
+    else
+        return a/b, emptyinterval()
+    end
+end
 #---------------------------------------------------------------------------------
 
 
@@ -203,30 +277,35 @@ function main()
 	Y6 = Interval(-9,6)
 	Y7 = Interval(-6,6)
 	Y8 = Interval(-6, f((-4-sqrt(76))/6))
+	Y9 = Interval(f((-4+sqrt(76))/6),6)
 	
 	println("tests question 4 : ")	
-	println(Q4(X1,Y1))
-	println(Q4(X2,Y2))
-	println(Q4(X7,Y3))
-	println(Q4(X4,Y4))
-	println(Q4(X4,Y5))
-	println(Q4(X5,Y2))
-	println(Q4(X6,Y6))
-	println(Q4(X7,Y7))
-	println(Q4(X8,Y8))
+	println(Q4(X1,Y1)) #vide
+	println(Q4(X2,Y2)) #[-0.5, 1.7]
+	println(Q4(X7,Y3)) #[1.9, 2.4]
+	println(Q4(X4,Y4)) #0
+	println(Q4(X4,Y5)) #vide
+	println(Q4(X5,Y2)) #vide
+	println(Q4(X6,Y6)) #[-2, 2]
+	println(Q4(X7,Y7)) #[0, 2.3]
+	println(Q4(X8,Y8)) #[-3, 2.2]
+	#=
+	println(Q4(X6,Y9)) #
 	println()
 	
 	println("tests question 6 : ")
-	println(Q6(X1,Y1))
-	println(Q6(X2,Y2))
-	println(Q6(X3,Y3))
-	println(Q6(X4,Y4))
-	println(Q6(X4,Y5))
-	println(Q6(X5,Y2))
-	println(Q6(X6,Y6))
+	println(Q6(X1,Y1)) #vide
+	println(Q6(X2,Y2)) #[-0.52009, 1.77438] × [-8, -3]
+	println(Q6(X7,Y3)) #[1.99995, 2.47354] × [0, 9]
+	println(Q6(X4,Y4)) #[0, 0] × [-6, -6]
+	println(Q6(X4,Y5)) #vide
+	println(Q6(X5,Y2)) #vide
+	println("----------------------------------------------------------------------------------------")
+	println(Q6(X6,Y6)) #
 	println(Q6(X7,Y7))
 	println(Q6(X8,Y8))
 	println()
+	=#
 end
 
 main()
